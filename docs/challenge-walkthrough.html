@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<title>FlowAccount Backend Challenge Walkthrough</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Noto Sans Thai", "Noto Sans", sans-serif;
+    font-size: 11.5pt;
+    line-height: 1.55;
+    color: #1a1a1a;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 12px 8px 32px;
+  }
+  h1 { font-size: 20pt; line-height: 1.35; margin: 0 0 12px; }
+  h2 {
+    font-size: 15pt;
+    margin: 28px 0 10px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #1f6b4a;
+    color: #164e38;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 12.5pt; margin: 18px 0 8px; color: #1f3d2f; page-break-after: avoid; }
+  h4 { font-size: 11.5pt; margin: 14px 0 6px; page-break-after: avoid; }
+  p { margin: 0 0 10px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 14px;
+    font-size: 10.5pt;
+    page-break-inside: auto;
+  }
+  th, td {
+    border: 1px solid #cfd8d3;
+    padding: 6px 8px;
+    vertical-align: top;
+    text-align: left;
+  }
+  th { background: #e8f4ee; color: #164e38; }
+  tr { page-break-inside: avoid; }
+  code {
+    font-family: "Noto Sans Mono", ui-monospace, monospace;
+    font-size: 0.92em;
+    background: #f3f6f4;
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  pre {
+    background: #f4f6f5;
+    border: 1px solid #d7e0dc;
+    border-radius: 6px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    font-size: 9.5pt;
+    line-height: 1.4;
+    page-break-inside: avoid;
+  }
+  pre code { background: none; padding: 0; }
+  blockquote {
+    margin: 10px 0 14px;
+    padding: 8px 12px;
+    border-left: 4px solid #1f6b4a;
+    background: #f3faf6;
+  }
+  hr { border: none; border-top: 1px solid #d7e0dc; margin: 18px 0; }
+</style>
+</head>
+<body>
+<h1>FlowAccount Backend Challenge — สิ่งที่ต้องทำ, Validation Rules, และผลทดสอบ</h1>
+<p>เอกสารนี้อธิบายโจทย์ <strong>ระบบจัดการสินค้า (Product Management)</strong> ตาม FlowAccount Engineering Workshop (Track A: Backend) โดยอ้างอิงผลจริงจาก <code>scripts/result.txt</code></p>
+<p><strong>หมายเหตุเกี่ยวกับชุดทดสอบ:</strong> เซิร์ฟเวอร์เก็บข้อมูลในหน่วยความจำ และรัน curl ทับข้อมูลเดิมอยู่แล้ว ดังนั้นเคสสร้างสินค้าใหม่ในรอบนี้จึงได้ <strong>HTTP 400 (SKU ซ้ำ)</strong> ไม่ใช่ 201 แต่สินค้า 4 รายการยังอยู่ในระบบ (id 1–4) และเคสอื่น ๆ ครอบคลุม validation / business logic ครบ</p>
+<hr>
+<h2>สถานการณ์และข้อมูลพื้นฐาน</h2>
+<p>FlowAccount ต้องการระบบจัดการสินค้าอย่างง่ายสำหรับร้านค้า SME ในประเทศไทย</p>
+<table>
+<thead>
+<tr>
+<th>ฟิลด์</th>
+<th>ความหมาย</th>
+<th>ข้อกำหนดจากโจทย์</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>name</code></td>
+<td>ชื่อสินค้า (Product Name)</td>
+<td>ต้องไม่ว่าง</td>
+</tr>
+<tr>
+<td><code>sku</code></td>
+<td>รหัสสินค้า</td>
+<td>ต้องไม่ซ้ำกัน</td>
+</tr>
+<tr>
+<td><code>price</code></td>
+<td>ราคา (บาท)</td>
+<td>ต้องมากกว่า 0</td>
+</tr>
+<tr>
+<td><code>stock</code></td>
+<td>จำนวนคงเหลือ</td>
+<td>ต้องไม่ติดลบ (<code>&gt;= 0</code>)</td>
+</tr>
+<tr>
+<td><code>category</code></td>
+<td>หมวดหมู่</td>
+<td>ต้องเป็น 1 ใน 4 ค่า: <code>อาหาร</code>, <code>เครื่องดื่ม</code>, <code>ของใช้</code>, <code>เสื้อผ้า</code></td>
+</tr>
+</tbody></table>
+<p>API ที่ implement แล้ว:</p>
+<ul>
+<li><code>POST /api/products</code> — Challenge 1</li>
+<li><code>GET /api/products</code> — Challenge 2</li>
+<li><code>POST /api/products/sell</code> — Challenge 3</li>
+<li><code>GET /api/products/search</code> — Challenge 4 (Bonus)</li>
+<li><code>PUT /api/products/bulk-price-update</code> — Challenge 5 (Bonus)</li>
+</ul>
+<p>สินค้าที่มีอยู่ในระบบตอนรัน <code>result.txt</code>:</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>name</th>
+<th>sku</th>
+<th>price</th>
+<th>stock</th>
+<th>category</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>ข้าวผัด</td>
+<td>FOOD001</td>
+<td>50 (หลังอัปเดตราคา)</td>
+<td>14 (หลังขาย)</td>
+<td>อาหาร</td>
+</tr>
+<tr>
+<td>2</td>
+<td>น้ำเปล่า</td>
+<td>DRINK001</td>
+<td>10</td>
+<td>0</td>
+<td>เครื่องดื่ม</td>
+</tr>
+<tr>
+<td>3</td>
+<td>สบู่</td>
+<td>HOME001</td>
+<td>30 (หลังอัปเดตราคา)</td>
+<td>15</td>
+<td>ของใช้</td>
+</tr>
+<tr>
+<td>4</td>
+<td>เสื้อยืด</td>
+<td>CLOTH001</td>
+<td>199</td>
+<td>8</td>
+<td>เสื้อผ้า</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Challenge 1: สร้าง API สำหรับเพิ่มสินค้าใหม่</h2>
+<p><strong>Endpoint:</strong> <code>POST /api/products</code></p>
+<h3>สิ่งที่ต้องทำ</h3>
+<ol>
+<li><p><strong>รับข้อมูลสินค้าจาก request body</strong><br>API อ่าน JSON: <code>name</code>, <code>sku</code>, <code>price</code>, <code>stock</code>, <code>category</code></p>
+</li>
+<li><p><strong>Validate ข้อมูลตามเงื่อนไขด้านล่าง</strong><br>รวมทุก error ใส่ array <code>errors</code> ไม่หยุดที่ข้อแรก</p>
+</li>
+<li><p><strong>ถ้า validation ผ่าน → บันทึกสินค้าและส่ง response กลับ</strong><br>ตามโจทย์ควรได้ <strong>HTTP 201 Created</strong> พร้อม <code>id</code> และ <code>createdAt</code></p>
+</li>
+<li><p><strong>ถ้า validation ไม่ผ่าน → ส่ง error messages กลับไป</strong><br><strong>HTTP 400 Bad Request</strong> ในรูปแบบ <code>{ &quot;errors&quot;: [ &quot;...&quot;, &quot;...&quot; ] }</code></p>
+</li>
+</ol>
+<h3>Validation Rules</h3>
+<table>
+<thead>
+<tr>
+<th>ฟิลด์</th>
+<th>กติกาจากโจทย์</th>
+<th>พฤติกรรมที่ implement</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Name</td>
+<td>ต้องไม่ว่าง</td>
+<td>ว่าง, <code>null</code>, หรือมีแต่ช่องว่าง → <code>&quot;ชื่อสินค้าต้องไม่ว่าง&quot;</code></td>
+</tr>
+<tr>
+<td>SKU</td>
+<td>ต้องไม่ว่าง</td>
+<td>ว่าง → <code>&quot;รหัสสินค้าต้องไม่ว่าง&quot;</code></td>
+</tr>
+<tr>
+<td>SKU</td>
+<td>ยาวอย่างน้อย 3 ตัวอักษร</td>
+<td>สั้นกว่า 3 → <code>&quot;รหัสสินค้าต้องมีอย่างน้อย 3 ตัวอักษร&quot;</code></td>
+</tr>
+<tr>
+<td>SKU</td>
+<td>ต้องไม่ซ้ำกับสินค้าที่มีอยู่แล้ว</td>
+<td>เทียบแบบไม่สนตัวพิมพ์ใหญ่-เล็ก → <code>&quot;รหัสสินค้าต้องไม่ซ้ำกับสินค้าที่มีอยู่แล้ว&quot;</code></td>
+</tr>
+<tr>
+<td>Price</td>
+<td>ต้องมากกว่า 0</td>
+<td><code>0</code>, ติดลบ, หรือไม่ใช่ตัวเลข → <code>&quot;ราคาต้องมากกว่า 0&quot;</code></td>
+</tr>
+<tr>
+<td>Stock</td>
+<td>ต้องไม่ติดลบ (<code>&gt;= 0</code>)</td>
+<td>ติดลบ หรือไม่ใช่ตัวเลข → <code>&quot;จำนวนคงเหลือต้องไม่ติดลบ&quot;</code></td>
+</tr>
+<tr>
+<td>Category</td>
+<td>ต้องเป็น 1 ใน 4 หมวดที่กำหนด</td>
+<td>นอกชุด → <code>&quot;หมวดหมู่ต้องเป็นหนึ่งใน: อาหาร, เครื่องดื่ม, ของใช้, เสื้อผ้า&quot;</code></td>
+</tr>
+</tbody></table>
+<p>ตัวอย่าง request ตามโจทย์:</p>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;ข้าวผัด&quot;,
+  &quot;sku&quot;: &quot;FOOD001&quot;,
+  &quot;price&quot;: 45.00,
+  &quot;stock&quot;: 20,
+  &quot;category&quot;: &quot;อาหาร&quot;
+}
+</code></pre>
+<p>ตัวอย่าง success ตามโจทย์: <strong>HTTP 201</strong> พร้อม <code>id</code>, ข้อมูลสินค้า, <code>createdAt</code></p>
+<p>ตัวอย่าง error ตามโจทย์: <strong>HTTP 400</strong> <code>{ &quot;errors&quot;: [&quot;ชื่อสินค้าต้องไม่ว่าง&quot;, &quot;รหัสสินค้าต้องมีอย่างน้อย 3 ตัวอักษร&quot;, &quot;ราคาต้องมากกว่า 0&quot;] }</code></p>
+<h3>ผลทดสอบจาก <code>result.txt</code></h3>
+<h4>1) ฟิลด์หายทั้งหมด — ตรวจทุกกติกาพร้อมกัน</h4>
+<p>Request: <code>POST /api/products</code> body <code>{}</code></p>
+<p>Response <strong>HTTP 400:</strong></p>
+<pre><code class="language-json">{
+  &quot;errors&quot;: [
+    &quot;ชื่อสินค้าต้องไม่ว่าง&quot;,
+    &quot;รหัสสินค้าต้องไม่ว่าง&quot;,
+    &quot;ราคาต้องมากกว่า 0&quot;,
+    &quot;จำนวนคงเหลือต้องไม่ติดลบ&quot;,
+    &quot;หมวดหมู่ต้องเป็นหนึ่งใน: อาหาร, เครื่องดื่ม, ของใช้, เสื้อผ้า&quot;
+  ]
+}
+</code></pre>
+<p>ตรงกับสิ่งที่ต้องทำข้อ 4: ส่ง error หลายข้อความกลับไปในครั้งเดียว</p>
+<h4>2) Name ต้องไม่ว่าง (รวมช่องว่างอย่างเดียว)</h4>
+<p>Request: <code>&quot;name&quot;: &quot;   &quot;</code> (ที่เหลือถูกต้อง)</p>
+<p><strong>HTTP 400:</strong> <code>{ &quot;errors&quot;: [&quot;ชื่อสินค้าต้องไม่ว่าง&quot;] }</code></p>
+<h4>3) SKU ต้องไม่ว่าง</h4>
+<p>Request: <code>&quot;sku&quot;: &quot;&quot;</code></p>
+<p><strong>HTTP 400:</strong> <code>{ &quot;errors&quot;: [&quot;รหัสสินค้าต้องไม่ว่าง&quot;] }</code></p>
+<h4>4) SKU ยาวอย่างน้อย 3 ตัวอักษร</h4>
+<p>Request: <code>&quot;sku&quot;: &quot;AB&quot;</code></p>
+<p><strong>HTTP 400:</strong> <code>{ &quot;errors&quot;: [&quot;รหัสสินค้าต้องมีอย่างน้อย 3 ตัวอักษร&quot;] }</code></p>
+<p>ตรงกับตัวอย่าง error ในโจทย์</p>
+<h4>5) Price ต้องมากกว่า 0</h4>
+<ul>
+<li><code>&quot;price&quot;: 0</code> → <strong>HTTP 400</strong> <code>&quot;ราคาต้องมากกว่า 0&quot;</code></li>
+<li><code>&quot;price&quot;: &quot;abc&quot;</code> → <strong>HTTP 400</strong> <code>&quot;ราคาต้องมากกว่า 0&quot;</code></li>
+</ul>
+<h4>6) Stock ต้องไม่ติดลบ</h4>
+<ul>
+<li><code>&quot;stock&quot;: -1</code> → <strong>HTTP 400</strong> <code>&quot;จำนวนคงเหลือต้องไม่ติดลบ&quot;</code></li>
+<li><code>&quot;stock&quot;: &quot;many&quot;</code> → <strong>HTTP 400</strong> <code>&quot;จำนวนคงเหลือต้องไม่ติดลบ&quot;</code></li>
+</ul>
+<h4>7) Category ต้องเป็น 1 ใน 4 หมวด</h4>
+<p>Request: <code>&quot;category&quot;: &quot;ของเล่น&quot;</code></p>
+<p><strong>HTTP 400:</strong> <code>&quot;หมวดหมู่ต้องเป็นหนึ่งใน: อาหาร, เครื่องดื่ม, ของใช้, เสื้อผ้า&quot;</code></p>
+<h4>8) หลาย error พร้อมกัน (ตามตัวอย่างโจทย์)</h4>
+<p>Request: <code>name</code> ว่าง, <code>sku</code> = <code>AB</code>, <code>price</code> = 0, <code>stock</code> = -1, <code>category</code> = ของเล่น</p>
+<p><strong>HTTP 400:</strong></p>
+<pre><code class="language-json">{
+  &quot;errors&quot;: [
+    &quot;ชื่อสินค้าต้องไม่ว่าง&quot;,
+    &quot;รหัสสินค้าต้องมีอย่างน้อย 3 ตัวอักษร&quot;,
+    &quot;ราคาต้องมากกว่า 0&quot;,
+    &quot;จำนวนคงเหลือต้องไม่ติดลบ&quot;,
+    &quot;หมวดหมู่ต้องเป็นหนึ่งใน: อาหาร, เครื่องดื่ม, ของใช้, เสื้อผ้า&quot;
+  ]
+}
+</code></pre>
+<h4>9) SKU ต้องไม่ซ้ำ</h4>
+<p>พยายามสร้าง <code>FOOD001</code>, <code>DRINK001</code>, <code>HOME001</code>, <code>CLOTH001</code> และ <code>food001</code> อีกครั้งบนเซิร์ฟเวอร์ที่มีข้อมูลอยู่แล้ว</p>
+<p>ทุกเคสได้ <strong>HTTP 400:</strong> <code>&quot;รหัสสินค้าต้องไม่ซ้ำกับสินค้าที่มีอยู่แล้ว&quot;</code></p>
+<p>เคส <code>food001</code> ยืนยันว่า uniqueness <strong>ไม่สนใจตัวพิมพ์ใหญ่-เล็ก</strong></p>
+<blockquote>
+<p>รอบนี้ไม่ได้ 201 เพราะ store ไม่ว่าง — แต่รายการสินค้า id 1–4 ใน Challenge 2 ยืนยันว่าเคยสร้างสำเร็จมาก่อน (มี <code>createdAt</code>)</p>
+</blockquote>
+<hr>
+<h2>Challenge 2: สร้าง API สำหรับดึงรายการสินค้า</h2>
+<p><strong>Endpoint:</strong> <code>GET /api/products</code> หรือ <code>GET /api/products?category=อาหาร</code></p>
+<h3>สิ่งที่ต้องทำ</h3>
+<ol>
+<li><p><strong>ดึงสินค้าทั้งหมดจาก storage</strong><br>ไม่มี <code>category</code> (หรือส่งค่าว่าง) → คืน array ทั้งก้อน</p>
+</li>
+<li><p><strong>ถ้ามี query parameter <code>category</code> → filter เฉพาะสินค้าในหมวดนั้น</strong><br>คืนเฉพาะแถวที่ <code>category</code> ตรงกันทุกตัวอักษร</p>
+</li>
+<li><p><strong>ส่ง list ของสินค้ากลับไป</strong><br>เป็น JSON array</p>
+</li>
+</ol>
+<p>โจทย์ไม่ได้กำหนด validation ของ <code>category</code> ตอน list แต่ implementation ปฏิเสธหมวดที่ไม่ใช่ 4 ค่าที่กำหนด เพื่อไม่ให้ filter แล้วได้ <code>[]</code> โดยที่ผู้เรียกพิมพ์หมวดผิด</p>
+<h3>Validation / กติกาเพิ่มเติมที่ใช้จริง</h3>
+<table>
+<thead>
+<tr>
+<th>กติกา</th>
+<th>ผลลัพธ์</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ไม่มี <code>category</code></td>
+<td>200, สินค้าทั้งหมด</td>
+</tr>
+<tr>
+<td><code>category=</code> (ว่าง)</td>
+<td>200, สินค้าทั้งหมด</td>
+</tr>
+<tr>
+<td><code>category</code> เป็น 1 ใน 4 หมวด</td>
+<td>200, เฉพาะหมวดนั้น</td>
+</tr>
+<tr>
+<td><code>category</code> นอกชุด</td>
+<td>400, error หมวดหมู่</td>
+</tr>
+</tbody></table>
+<h3>ผลทดสอบจาก <code>result.txt</code></h3>
+<h4>1) ดึงสินค้าทั้งหมด</h4>
+<p><code>GET /api/products</code> → <strong>HTTP 200</strong> ได้ 4 รายการ (ข้าวผัด, น้ำเปล่า, สบู่, เสื้อยืด)</p>
+<h4>2) <code>category</code> ว่างยังดึงทั้งหมด</h4>
+<p><code>GET /api/products?category=</code> → <strong>HTTP 200</strong> ชุดเดียวกัน 4 รายการ</p>
+<h4>3) Filter หมวด <code>อาหาร</code></h4>
+<p><strong>HTTP 200:</strong> เหลือเพียง id 1 ข้าวผัด / FOOD001</p>
+<h4>4) Filter หมวด <code>เสื้อผ้า</code></h4>
+<p><strong>HTTP 200:</strong> เหลือเพียง id 4 เสื้อยืด / CLOTH001</p>
+<h4>5) หมวดที่ไม่มีในระบบ</h4>
+<p><code>category=ของเล่น</code> → <strong>HTTP 400</strong> <code>&quot;หมวดหมู่ต้องเป็นหนึ่งใน: อาหาร, เครื่องดื่ม, ของใช้, เสื้อผ้า&quot;</code></p>
+<hr>
+<h2>Challenge 3: สร้าง API สำหรับขายสินค้า (ตัดสต็อก)</h2>
+<p><strong>Endpoint:</strong> <code>POST /api/products/sell</code></p>
+<h3>สิ่งที่ต้องทำ</h3>
+<ol>
+<li><strong>รับข้อมูล <code>productId</code> และ <code>quantity</code> ที่ต้องการขาย</strong> จาก request body</li>
+<li><strong>ค้นหาสินค้าจาก <code>productId</code></strong></li>
+<li><strong>ตรวจสอบว่ามีสินค้าในระบบหรือไม่</strong></li>
+<li><strong>ตรวจสอบว่า stock เพียงพอหรือไม่</strong></li>
+<li><strong>ถ้าผ่านทุกเงื่อนไข → ตัดสต็อก และส่ง response กลับ</strong><br><code>stock = stock - quantity</code></li>
+</ol>
+<h3>Business Logic ที่ต้องคิด (ตรวจตามลำดับ)</h3>
+<p>โจทย์บังคับลำดับนี้:</p>
+<ol>
+<li><code>quantity &gt; 0</code> หรือไม่</li>
+<li>มีสินค้าในระบบหรือไม่</li>
+<li><code>stock &gt;= quantity</code> หรือไม่</li>
+<li>ผ่านทุกข้อ → <code>stock = stock - quantity</code></li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>ลำดับ</th>
+<th>กติกา</th>
+<th>HTTP</th>
+<th>ข้อความจากระบบ</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>quantity ต้องมากกว่า 0 (ขาด, 0, ติดลบ, ไม่ใช่ตัวเลข)</td>
+<td>400</td>
+<td>จำนวนที่ขายต้องมากกว่า 0</td>
+</tr>
+<tr>
+<td>2</td>
+<td>ต้องมีสินค้าตาม <code>productId</code></td>
+<td>404</td>
+<td>ไม่พบสินค้าในระบบ</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>stock &gt;= quantity</code></td>
+<td>400</td>
+<td>สต็อกไม่เพียงพอ (คงเหลือ X, ต้องการขาย Y)</td>
+</tr>
+<tr>
+<td>4</td>
+<td>ผ่านทั้งหมด</td>
+<td>200</td>
+<td>ขายสินค้าสำเร็จ + สินค้าหลังตัดสต็อก</td>
+</tr>
+</tbody></table>
+<h3>ผลทดสอบจาก <code>result.txt</code></h3>
+<h4>ลำดับ 1 — quantity &gt; 0</h4>
+<table>
+<thead>
+<tr>
+<th>เคส</th>
+<th>body โดยย่อ</th>
+<th>HTTP</th>
+<th>errors</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ไม่ส่ง quantity</td>
+<td><code>{ &quot;productId&quot;: 1 }</code></td>
+<td>400</td>
+<td>จำนวนที่ขายต้องมากกว่า 0</td>
+</tr>
+<tr>
+<td>quantity = 0</td>
+<td><code>{ &quot;productId&quot;: 1, &quot;quantity&quot;: 0 }</code></td>
+<td>400</td>
+<td>จำนวนที่ขายต้องมากกว่า 0</td>
+</tr>
+<tr>
+<td>quantity ติดลบ</td>
+<td><code>{ &quot;quantity&quot;: -2 }</code></td>
+<td>400</td>
+<td>จำนวนที่ขายต้องมากกว่า 0</td>
+</tr>
+<tr>
+<td>ไม่ใช่ตัวเลข</td>
+<td><code>{ &quot;quantity&quot;: &quot;two&quot; }</code></td>
+<td>400</td>
+<td>จำนวนที่ขายต้องมากกว่า 0</td>
+</tr>
+</tbody></table>
+<p>ยังไม่ค้นสินค้าและยังไม่ตัดสต็อก — ตรงลำดับที่โจทย์กำหนด</p>
+<h4>ลำดับ 2 — มีสินค้าในระบบหรือไม่</h4>
+<ul>
+<li><code>{ &quot;productId&quot;: 999, &quot;quantity&quot;: 1 }</code> → <strong>HTTP 404</strong> <code>&quot;ไม่พบสินค้าในระบบ&quot;</code></li>
+<li><code>{ &quot;productId&quot;: &quot;abc&quot;, &quot;quantity&quot;: 1 }</code> → <strong>HTTP 404</strong> <code>&quot;ไม่พบสินค้าในระบบ&quot;</code></li>
+</ul>
+<h4>ลำดับ 3 — stock เพียงพอหรือไม่</h4>
+<p>น้ำเปล่า id 2 มี <code>stock = 0</code> ขาย 1 ชิ้น:</p>
+<p><strong>HTTP 400:</strong> <code>&quot;สต็อกไม่เพียงพอ (คงเหลือ 0, ต้องการขาย 1)&quot;</code></p>
+<h4>ลำดับ 4 — ตัดสต็อกเมื่อผ่านทุกเงื่อนไข</h4>
+<p><code>{ &quot;productId&quot;: 1, &quot;quantity&quot;: 3 }</code> → <strong>HTTP 200</strong></p>
+<pre><code class="language-json">{
+  &quot;message&quot;: &quot;ขายสินค้าสำเร็จ&quot;,
+  &quot;product&quot;: {
+    &quot;id&quot;: 1,
+    &quot;name&quot;: &quot;ข้าวผัด&quot;,
+    &quot;sku&quot;: &quot;FOOD001&quot;,
+    &quot;price&quot;: 50,
+    &quot;stock&quot;: 14,
+    &quot;category&quot;: &quot;อาหาร&quot;
+  },
+  &quot;soldQuantity&quot;: 3
+}
+</code></pre>
+<p><code>GET /api/products</code> หลังขายยืนยันว่าข้าวผัดเหลือ <strong>stock 14</strong> (ตัดจากสต็อกก่อนหน้า)</p>
+<hr>
+<h2>Challenge 4 (Bonus): ค้นหาสินค้า</h2>
+<p><strong>Endpoint:</strong> <code>GET /api/products/search?keyword=ข้าว</code></p>
+<h3>สิ่งที่ต้องทำ</h3>
+<ol>
+<li><p><strong>ค้นหาสินค้าที่มี keyword ปรากฏใน <code>name</code> หรือ <code>sku</code></strong><br>เป็น substring ไม่ต้องตรงทั้งคำ</p>
+</li>
+<li><p><strong>การค้นหาต้องไม่สนใจตัวพิมพ์ใหญ่-เล็ก (case-insensitive)</strong><br><code>food</code> ต้องเจอ <code>FOOD001</code></p>
+</li>
+</ol>
+<p>กติกาเสริมที่ implement: ถ้าไม่มี keyword หรือมีแต่ช่องว่าง → <strong>HTTP 400</strong> <code>&quot;กรุณาระบุ keyword&quot;</code><br>ไม่พบรายการ → <strong>HTTP 200</strong> และ <code>[]</code></p>
+<h3>ผลทดสอบจาก <code>result.txt</code></h3>
+<table>
+<thead>
+<tr>
+<th>เคส</th>
+<th>request</th>
+<th>HTTP</th>
+<th>ผล</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ไม่ส่ง keyword</td>
+<td><code>GET /api/products/search</code></td>
+<td>400</td>
+<td>กรุณาระบุ keyword</td>
+</tr>
+<tr>
+<td>keyword เป็นช่องว่าง</td>
+<td><code>keyword=   </code></td>
+<td>400</td>
+<td>กรุณาระบุ keyword</td>
+</tr>
+<tr>
+<td>ตรงใน name</td>
+<td><code>keyword=ข้าว</code></td>
+<td>200</td>
+<td>ได้ข้าวผัด</td>
+</tr>
+<tr>
+<td>ตรงใน sku แบบไม่สนตัวพิมพ์</td>
+<td><code>keyword=food</code></td>
+<td>200</td>
+<td>ได้ FOOD001</td>
+</tr>
+<tr>
+<td>ไม่ตรงเลย</td>
+<td><code>keyword=zzzz-not-found</code></td>
+<td>200</td>
+<td><code>[]</code></td>
+</tr>
+</tbody></table>
+<p>เคส <code>keyword=ข้าว</code> ตรงตัวอย่างในโจทย์ และเคส <code>food</code> ยืนยัน case-insensitive บน SKU</p>
+<hr>
+<h2>Challenge 5 (Bonus): อัปเดทราคาเป็นชุด</h2>
+<p><strong>Endpoint:</strong> <code>PUT /api/products/bulk-price-update</code></p>
+<h3>สิ่งที่ต้องทำ</h3>
+<ol>
+<li><strong>รับ array ของ <code>{ productId, newPrice }</code></strong></li>
+<li><strong>อัปเดทราคาของแต่ละสินค้า</strong></li>
+<li><strong>ส่ง summary กลับไปว่าอัปเดทสำเร็จกี่รายการ</strong></li>
+</ol>
+<p>รูปแบบ summary ที่ใช้: <code>{ &quot;updated&quot;: N, &quot;failed&quot;: M, &quot;failures&quot;: [ ... ] }</code><br>รายการที่พังไม่ทำให้รายการอื่นหยุด</p>
+<h3>Validation Rules</h3>
+<table>
+<thead>
+<tr>
+<th>กติกา</th>
+<th>HTTP</th>
+<th>ผล</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>body ไม่ใช่ array</td>
+<td>400</td>
+<td>ต้องส่งเป็น array ของ {productId, newPrice}</td>
+</tr>
+<tr>
+<td>array ว่าง</td>
+<td>200</td>
+<td><code>updated: 0</code>, <code>failed: 0</code></td>
+</tr>
+<tr>
+<td>ไม่พบ <code>productId</code></td>
+<td>200 (รายการนั้น failed)</td>
+<td>ไม่พบสินค้าในระบบ</td>
+</tr>
+<tr>
+<td><code>newPrice</code> ไม่มากกว่า 0</td>
+<td>200 (รายการนั้น failed)</td>
+<td>ราคาต้องมากกว่า 0</td>
+</tr>
+<tr>
+<td>รายการถูกต้อง</td>
+<td>นับใน <code>updated</code> และเขียน <code>price</code> ใหม่</td>
+<td>—</td>
+</tr>
+</tbody></table>
+<p>กติราคา <code>newPrice &gt; 0</code> สอดคล้องกับ Challenge 1</p>
+<h3>ผลทดสอบจาก <code>result.txt</code></h3>
+<h4>1) ต้องเป็น array</h4>
+<p>ส่ง object <code>{ &quot;productId&quot;: 1, &quot;newPrice&quot;: 50 }</code> → <strong>HTTP 400</strong></p>
+<pre><code class="language-json">{ &quot;errors&quot;: [&quot;ต้องส่งเป็น array ของ {productId, newPrice}&quot;] }
+</code></pre>
+<h4>2) array ว่าง — summary ศูนย์</h4>
+<p><strong>HTTP 200:</strong> <code>{ &quot;updated&quot;: 0, &quot;failed&quot;: 0, &quot;failures&quot;: [] }</code></p>
+<h4>3) ไม่พบสินค้า</h4>
+<p><code>[{ &quot;productId&quot;: 999, &quot;newPrice&quot;: 50 }]</code> → <strong>HTTP 200</strong> <code>updated: 0</code>, <code>failed: 1</code>, reason <code>&quot;ไม่พบสินค้าในระบบ&quot;</code></p>
+<h4>4) ราคาไม่มากกว่า 0</h4>
+<ul>
+<li><code>newPrice: 0</code> → failed <code>&quot;ราคาต้องมากกว่า 0&quot;</code></li>
+<li><code>newPrice: &quot;cheap&quot;</code> → failed <code>&quot;ราคาต้องมากกว่า 0&quot;</code></li>
+</ul>
+<h4>5) รายการ null ใน array</h4>
+<p><code>[null]</code> → failed <code>&quot;ไม่พบสินค้าในระบบ&quot;</code> (<code>productId</code> เป็น <code>null</code>)</p>
+<h4>6) อัปเดตสำเร็จปนกับล้มเหลว (สรุปจำนวน)</h4>
+<p>Request:</p>
+<pre><code class="language-json">[
+  { &quot;productId&quot;: 1, &quot;newPrice&quot;: 50 },
+  { &quot;productId&quot;: 3, &quot;newPrice&quot;: 30 },
+  { &quot;productId&quot;: 999, &quot;newPrice&quot;: 1 },
+  { &quot;productId&quot;: 2, &quot;newPrice&quot;: -5 }
+]
+</code></pre>
+<p><strong>HTTP 200:</strong></p>
+<pre><code class="language-json">{
+  &quot;updated&quot;: 2,
+  &quot;failed&quot;: 2,
+  &quot;failures&quot;: [
+    { &quot;productId&quot;: 999, &quot;reason&quot;: &quot;ไม่พบสินค้าในระบบ&quot; },
+    { &quot;productId&quot;: 2, &quot;reason&quot;: &quot;ราคาต้องมากกว่า 0&quot; }
+  ]
+}
+</code></pre>
+<p>ตรงสิ่งที่ต้องทำข้อ 3: สรุปว่าอัปเดตสำเร็จ <strong>2</strong> รายการ (id 1 ราคา 50, id 3 ราคา 30) ล้มเหลว 2 รายการ</p>
+<p><code>GET /api/products</code> ท้ายไฟล์ยืนยันราคา: ข้าวผัด <strong>50</strong>, สบู่ <strong>30</strong>, น้ำเปล่ายัง <strong>10</strong>, เสื้อยืดยัง <strong>199</strong></p>
+<hr>
+<h2>สรุปความครบของโจทย์</h2>
+<table>
+<thead>
+<tr>
+<th>Challenge</th>
+<th>สิ่งที่ต้องทำ</th>
+<th>Validation / business rules</th>
+<th>สถานะจาก <code>result.txt</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1 เพิ่มสินค้า</td>
+<td>รับ body, validate, บันทึกหรือส่ง errors</td>
+<td>name, sku (ว่าง / ความยาว / ซ้ำ), price &gt; 0, stock &gt;= 0, category 4 ค่า</td>
+<td>400 ครบทุกกติกา; เคส 201 ไม่เกิดในรอบนี้เพราะ SKU ซ้ำกับของเดิม</td>
+</tr>
+<tr>
+<td>2 ดึงรายการ</td>
+<td>ดึงทั้งหมด, filter ตาม category, ส่ง list</td>
+<td>หมวดต้องเป็น 4 ค่าถ้าส่งมา</td>
+<td>200 ทั้งก้อน + filter อาหาร/เสื้อผ้า; 400 หมวดผิด</td>
+</tr>
+<tr>
+<td>3 ขาย/ตัดสต็อก</td>
+<td>รับ id+qty, ค้นหา, เช็คมีสินค้า, เช็คสต็อก, ตัดสต็อก</td>
+<td>ตรวจตามลำดับ qty → มีสินค้า → stock พอ</td>
+<td>400 / 404 / 200 ตามลำดับ; stock ข้าวผัดเหลือ 14</td>
+</tr>
+<tr>
+<td>4 ค้นหา</td>
+<td>หาใน name หรือ sku, ไม่สนตัวพิมพ์</td>
+<td>ต้องมี keyword</td>
+<td>เจอคำว่าข้าว และ food; ไม่เจอได้ <code>[]</code></td>
+</tr>
+<tr>
+<td>5 อัปเดตราคาชุด</td>
+<td>รับ array, อัปเดตรายตัว, ส่งจำนวนที่สำเร็จ</td>
+<td>ต้องเป็น array; ราคา &gt; 0; มีสินค้า</td>
+<td><code>updated: 2</code>, <code>failed: 2</code> ตามที่คาด</td>
+</tr>
+</tbody></table>
+
+</body>
+</html>

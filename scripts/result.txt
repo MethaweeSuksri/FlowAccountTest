@@ -1,0 +1,287 @@
+
+============================================================
+GET /health
+============================================================
+
+# [200] health check
+# -X GET http://localhost:3000/health
+{"status":"ok"}
+HTTP 200
+
+
+============================================================
+POST /api/products — validation
+============================================================
+
+# [400] all required fields missing
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {}
+{"errors":["ชื่อสินค้าต้องไม่ว่าง","รหัสสินค้าต้องไม่ว่าง","ราคาต้องมากกว่า 0","จำนวนคงเหลือต้องไม่ติดลบ","หมวดหมู่ต้องเป็นหนึ่งใน: อาหาร, เครื่องดื่ม, ของใช้, เสื้อผ้า"]}
+HTTP 400
+
+
+# [400] name is whitespace only
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"   ","sku":"FOOD000","price":10,"stock":1,"category":"อาหาร"}
+{"errors":["ชื่อสินค้าต้องไม่ว่าง"]}
+HTTP 400
+
+
+# [400] sku is empty
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"ข้าวผัด","sku":"","price":45,"stock":20,"category":"อาหาร"}
+{"errors":["รหัสสินค้าต้องไม่ว่าง"]}
+HTTP 400
+
+
+# [400] sku shorter than 3 characters
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"ข้าวผัด","sku":"AB","price":45,"stock":20,"category":"อาหาร"}
+{"errors":["รหัสสินค้าต้องมีอย่างน้อย 3 ตัวอักษร"]}
+HTTP 400
+
+
+# [400] price is 0
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"ข้าวผัด","sku":"FOOD000","price":0,"stock":20,"category":"อาหาร"}
+{"errors":["ราคาต้องมากกว่า 0"]}
+HTTP 400
+
+
+# [400] price is not a number
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"ข้าวผัด","sku":"FOOD000","price":"abc","stock":20,"category":"อาหาร"}
+{"errors":["ราคาต้องมากกว่า 0"]}
+HTTP 400
+
+
+# [400] stock is negative
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"ข้าวผัด","sku":"FOOD000","price":45,"stock":-1,"category":"อาหาร"}
+{"errors":["จำนวนคงเหลือต้องไม่ติดลบ"]}
+HTTP 400
+
+
+# [400] stock is not a number
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"ข้าวผัด","sku":"FOOD000","price":45,"stock":"many","category":"อาหาร"}
+{"errors":["จำนวนคงเหลือต้องไม่ติดลบ"]}
+HTTP 400
+
+
+# [400] invalid category
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"ข้าวผัด","sku":"FOOD000","price":45,"stock":20,"category":"ของเล่น"}
+{"errors":["หมวดหมู่ต้องเป็นหนึ่งใน: อาหาร, เครื่องดื่ม, ของใช้, เสื้อผ้า"]}
+HTTP 400
+
+
+# [400] multiple validation errors at once
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"","sku":"AB","price":0,"stock":-1,"category":"ของเล่น"}
+{"errors":["ชื่อสินค้าต้องไม่ว่าง","รหัสสินค้าต้องมีอย่างน้อย 3 ตัวอักษร","ราคาต้องมากกว่า 0","จำนวนคงเหลือต้องไม่ติดลบ","หมวดหมู่ต้องเป็นหนึ่งใน: อาหาร, เครื่องดื่ม, ของใช้, เสื้อผ้า"]}
+HTTP 400
+
+
+============================================================
+POST /api/products — success
+============================================================
+
+# [201] create อาหาร (stock > 0)
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":" ข้าวผัด ","sku":" FOOD001 ","price":45.00,"stock":20,"category":"อาหาร"}
+{"errors":["รหัสสินค้าต้องไม่ซ้ำกับสินค้าที่มีอยู่แล้ว"]}
+HTTP 400
+
+
+# [201] create เครื่องดื่ม (stock = 0)
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"น้ำเปล่า","sku":"DRINK001","price":10,"stock":0,"category":"เครื่องดื่ม"}
+{"errors":["รหัสสินค้าต้องไม่ซ้ำกับสินค้าที่มีอยู่แล้ว"]}
+HTTP 400
+
+
+# [201] create ของใช้
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"สบู่","sku":"HOME001","price":25,"stock":15,"category":"ของใช้"}
+{"errors":["รหัสสินค้าต้องไม่ซ้ำกับสินค้าที่มีอยู่แล้ว"]}
+HTTP 400
+
+
+# [201] create เสื้อผ้า
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"เสื้อยืด","sku":"CLOTH001","price":199,"stock":8,"category":"เสื้อผ้า"}
+{"errors":["รหัสสินค้าต้องไม่ซ้ำกับสินค้าที่มีอยู่แล้ว"]}
+HTTP 400
+
+
+# [400] duplicate sku (case-insensitive)
+# -X POST http://localhost:3000/api/products -H Content-Type: application/json -d {"name":"ข้าวผัดพิเศษ","sku":"food001","price":50,"stock":5,"category":"อาหาร"}
+{"errors":["รหัสสินค้าต้องไม่ซ้ำกับสินค้าที่มีอยู่แล้ว"]}
+HTTP 400
+
+
+============================================================
+GET /api/products
+============================================================
+
+# [200] list all products
+# -X GET http://localhost:3000/api/products
+[{"id":1,"name":"ข้าวผัด","sku":"FOOD001","price":50,"stock":17,"category":"อาหาร","createdAt":"2026-09-25T03:10:43.457Z"},{"id":2,"name":"น้ำเปล่า","sku":"DRINK001","price":10,"stock":0,"category":"เครื่องดื่ม","createdAt":"2026-09-25T03:10:43.464Z"},{"id":3,"name":"สบู่","sku":"HOME001","price":30,"stock":15,"category":"ของใช้","createdAt":"2026-09-25T03:10:43.472Z"},{"id":4,"name":"เสื้อยืด","sku":"CLOTH001","price":199,"stock":8,"category":"เสื้อผ้า","createdAt":"2026-09-25T03:10:43.478Z"}]
+HTTP 200
+
+
+# [200] list all when category query is empty
+# -X GET http://localhost:3000/api/products?category=
+[{"id":1,"name":"ข้าวผัด","sku":"FOOD001","price":50,"stock":17,"category":"อาหาร","createdAt":"2026-09-25T03:10:43.457Z"},{"id":2,"name":"น้ำเปล่า","sku":"DRINK001","price":10,"stock":0,"category":"เครื่องดื่ม","createdAt":"2026-09-25T03:10:43.464Z"},{"id":3,"name":"สบู่","sku":"HOME001","price":30,"stock":15,"category":"ของใช้","createdAt":"2026-09-25T03:10:43.472Z"},{"id":4,"name":"เสื้อยืด","sku":"CLOTH001","price":199,"stock":8,"category":"เสื้อผ้า","createdAt":"2026-09-25T03:10:43.478Z"}]
+HTTP 200
+
+
+# [200] filter by category อาหาร
+# -G http://localhost:3000/api/products --data-urlencode category=อาหาร
+[{"id":1,"name":"ข้าวผัด","sku":"FOOD001","price":50,"stock":17,"category":"อาหาร","createdAt":"2026-09-25T03:10:43.457Z"}]
+HTTP 200
+
+
+# [200] filter by category เสื้อผ้า
+# -G http://localhost:3000/api/products --data-urlencode category=เสื้อผ้า
+[{"id":4,"name":"เสื้อยืด","sku":"CLOTH001","price":199,"stock":8,"category":"เสื้อผ้า","createdAt":"2026-09-25T03:10:43.478Z"}]
+HTTP 200
+
+
+# [400] filter by unknown category
+# -G http://localhost:3000/api/products --data-urlencode category=ของเล่น
+{"errors":["หมวดหมู่ต้องเป็นหนึ่งใน: อาหาร, เครื่องดื่ม, ของใช้, เสื้อผ้า"]}
+HTTP 400
+
+
+============================================================
+GET /api/products/search
+============================================================
+
+# [400] search without keyword
+# -X GET http://localhost:3000/api/products/search
+{"errors":["กรุณาระบุ keyword"]}
+HTTP 400
+
+
+# [400] search with blank keyword
+# -G http://localhost:3000/api/products/search --data-urlencode keyword=   
+{"errors":["กรุณาระบุ keyword"]}
+HTTP 400
+
+
+# [200] search by name substring
+# -G http://localhost:3000/api/products/search --data-urlencode keyword=ข้าว
+[{"id":1,"name":"ข้าวผัด","sku":"FOOD001","price":50,"stock":17,"category":"อาหาร","createdAt":"2026-09-25T03:10:43.457Z"}]
+HTTP 200
+
+
+# [200] search by sku case-insensitive
+# -G http://localhost:3000/api/products/search --data-urlencode keyword=food
+[{"id":1,"name":"ข้าวผัด","sku":"FOOD001","price":50,"stock":17,"category":"อาหาร","createdAt":"2026-09-25T03:10:43.457Z"}]
+HTTP 200
+
+
+# [200] search with no matches
+# -G http://localhost:3000/api/products/search --data-urlencode keyword=zzzz-not-found
+[]
+HTTP 200
+
+
+============================================================
+POST /api/products/sell
+============================================================
+
+# [400] sell quantity missing
+# -X POST http://localhost:3000/api/products/sell -H Content-Type: application/json -d {"productId":1}
+{"errors":["จำนวนที่ขายต้องมากกว่า 0"]}
+HTTP 400
+
+
+# [400] sell quantity is 0
+# -X POST http://localhost:3000/api/products/sell -H Content-Type: application/json -d {"productId":1,"quantity":0}
+{"errors":["จำนวนที่ขายต้องมากกว่า 0"]}
+HTTP 400
+
+
+# [400] sell quantity is negative
+# -X POST http://localhost:3000/api/products/sell -H Content-Type: application/json -d {"productId":1,"quantity":-2}
+{"errors":["จำนวนที่ขายต้องมากกว่า 0"]}
+HTTP 400
+
+
+# [400] sell quantity is not a number
+# -X POST http://localhost:3000/api/products/sell -H Content-Type: application/json -d {"productId":1,"quantity":"two"}
+{"errors":["จำนวนที่ขายต้องมากกว่า 0"]}
+HTTP 400
+
+
+# [404] sell unknown productId
+# -X POST http://localhost:3000/api/products/sell -H Content-Type: application/json -d {"productId":999,"quantity":1}
+{"errors":["ไม่พบสินค้าในระบบ"]}
+HTTP 404
+
+
+# [404] sell productId is not a number
+# -X POST http://localhost:3000/api/products/sell -H Content-Type: application/json -d {"productId":"abc","quantity":1}
+{"errors":["ไม่พบสินค้าในระบบ"]}
+HTTP 404
+
+
+# [400] sell when stock is insufficient
+# -X POST http://localhost:3000/api/products/sell -H Content-Type: application/json -d {"productId":2,"quantity":1}
+{"errors":["สต็อกไม่เพียงพอ (คงเหลือ 0, ต้องการขาย 1)"]}
+HTTP 400
+
+
+# [200] sell success, reduce stock
+# -X POST http://localhost:3000/api/products/sell -H Content-Type: application/json -d {"productId":1,"quantity":3}
+{"message":"ขายสินค้าสำเร็จ","product":{"id":1,"name":"ข้าวผัด","sku":"FOOD001","price":50,"stock":14,"category":"อาหาร","createdAt":"2026-09-25T03:10:43.457Z"},"soldQuantity":3}
+HTTP 200
+
+
+# [200] list after sell to confirm stock
+# -X GET http://localhost:3000/api/products
+[{"id":1,"name":"ข้าวผัด","sku":"FOOD001","price":50,"stock":14,"category":"อาหาร","createdAt":"2026-09-25T03:10:43.457Z"},{"id":2,"name":"น้ำเปล่า","sku":"DRINK001","price":10,"stock":0,"category":"เครื่องดื่ม","createdAt":"2026-09-25T03:10:43.464Z"},{"id":3,"name":"สบู่","sku":"HOME001","price":30,"stock":15,"category":"ของใช้","createdAt":"2026-09-25T03:10:43.472Z"},{"id":4,"name":"เสื้อยืด","sku":"CLOTH001","price":199,"stock":8,"category":"เสื้อผ้า","createdAt":"2026-09-25T03:10:43.478Z"}]
+HTTP 200
+
+
+============================================================
+PUT /api/products/bulk-price-update
+============================================================
+
+# [400] bulk update body is an object, not array
+# -X PUT http://localhost:3000/api/products/bulk-price-update -H Content-Type: application/json -d {"productId":1,"newPrice":50}
+{"errors":["ต้องส่งเป็น array ของ {productId, newPrice}"]}
+HTTP 400
+
+
+# [200] bulk update empty array
+# -X PUT http://localhost:3000/api/products/bulk-price-update -H Content-Type: application/json -d []
+{"updated":0,"failed":0,"failures":[]}
+HTTP 200
+
+
+# [200] bulk update unknown productId
+# -X PUT http://localhost:3000/api/products/bulk-price-update -H Content-Type: application/json -d [{"productId":999,"newPrice":50}]
+{"updated":0,"failed":1,"failures":[{"productId":999,"reason":"ไม่พบสินค้าในระบบ"}]}
+HTTP 200
+
+
+# [200] bulk update price is 0 (item fails)
+# -X PUT http://localhost:3000/api/products/bulk-price-update -H Content-Type: application/json -d [{"productId":1,"newPrice":0}]
+{"updated":0,"failed":1,"failures":[{"productId":1,"reason":"ราคาต้องมากกว่า 0"}]}
+HTTP 200
+
+
+# [200] bulk update price is not a number (item fails)
+# -X PUT http://localhost:3000/api/products/bulk-price-update -H Content-Type: application/json -d [{"productId":1,"newPrice":"cheap"}]
+{"updated":0,"failed":1,"failures":[{"productId":1,"reason":"ราคาต้องมากกว่า 0"}]}
+HTTP 200
+
+
+# [200] bulk update null item in array
+# -X PUT http://localhost:3000/api/products/bulk-price-update -H Content-Type: application/json -d [null]
+{"updated":0,"failed":1,"failures":[{"productId":null,"reason":"ไม่พบสินค้าในระบบ"}]}
+HTTP 200
+
+
+# [200] bulk update mixed success and failures
+# -X PUT http://localhost:3000/api/products/bulk-price-update -H Content-Type: application/json -d [{"productId":1,"newPrice":50},{"productId":3,"newPrice":30},{"productId":999,"newPrice":1},{"productId":2,"newPrice":-5}]
+{"updated":2,"failed":2,"failures":[{"productId":999,"reason":"ไม่พบสินค้าในระบบ"},{"productId":2,"reason":"ราคาต้องมากกว่า 0"}]}
+HTTP 200
+
+
+# [200] list after bulk price update
+# -X GET http://localhost:3000/api/products
+[{"id":1,"name":"ข้าวผัด","sku":"FOOD001","price":50,"stock":14,"category":"อาหาร","createdAt":"2026-09-25T03:10:43.457Z"},{"id":2,"name":"น้ำเปล่า","sku":"DRINK001","price":10,"stock":0,"category":"เครื่องดื่ม","createdAt":"2026-09-25T03:10:43.464Z"},{"id":3,"name":"สบู่","sku":"HOME001","price":30,"stock":15,"category":"ของใช้","createdAt":"2026-09-25T03:10:43.472Z"},{"id":4,"name":"เสื้อยืด","sku":"CLOTH001","price":199,"stock":8,"category":"เสื้อผ้า","createdAt":"2026-09-25T03:10:43.478Z"}]
+HTTP 200
+
+Done. Re-run against a fresh server if IDs drifted.
